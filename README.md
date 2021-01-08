@@ -2,7 +2,7 @@
 
 ## Overview 
 
-In this project, I will use machine learning (ML) to predict patient's survival following a heart failure, using patients' available electronic medical records. In order to try to reproduce the results reported in a paper called [Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone]("https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-020-1023-5"), I will also rank the features corresponding to the most important risk factors, as determined by the ML algorithms. 
+In this project, I will use machine learning (ML) to predict patient's survival following a heart failure, using patients' available electronic medical records. In order to try to reproduce the results reported in a paper called **"Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone**" (https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-020-1023-5), I will also rank the features corresponding to the most important risk factors, as determined by the ML algorithms. 
 
 I will build  and tune 8 different models:
 
@@ -18,7 +18,7 @@ I will build  and tune 8 different models:
 
 ## Dataset
 
-The dataset here is [Heart failure clinical records Data Set]("https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records") taken from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/index.php"). The dataset can also be found on [Kaggle]("https://www.kaggle.com/") at [the following link]("https://www.kaggle.com/andrewmvd/heart-failure-clinical-data/notebooks"). 
+The dataset here is [Heart failure clinical records Data Set]("https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records") taken from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/index.php"). The dataset can also be found on Kaggle (https://www.kaggle.com/andrewmvd/heart-failure-clinical-data/notebooks). 
 
 ## File structure
 There are three files: 
