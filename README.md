@@ -4,7 +4,7 @@
 
 In this project, I will use machine learning (ML) to predict patient's survival following a heart failure, using patients' available electronic medical records. 
 
-In order to try to reproduce the results reported in a paper called **"Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone**" located at https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-020-1023-5, I will also rank the features corresponding to the most important risk factors, as determined by the ML algorithms. 
+In order to try to reproduce the results reported in the paper **"Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone**" (https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-020-1023-5), I will also rank the features corresponding to the most important risk factors, as determined by the ML algorithms. 
 
 I will build  and tune 8 different models:
 
