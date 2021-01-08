@@ -20,7 +20,7 @@ I will build  and tune 8 different models:
 
 ## Dataset
 
-The dataset here is [Heart failure clinical records Data Set]("https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records") taken from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/index.php"). The dataset can also be found on Kaggle (https://www.kaggle.com/andrewmvd/heart-failure-clinical-data/notebooks). 
+The dataset here is [Heart failure clinical records Data Set]("https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records") taken from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/index.php"). The dataset can also be found on Kaggle (https://www.kaggle.com/andrewmvd/heart-failure-clinical-data). 
 
 ## File structure
 There are three files: 
