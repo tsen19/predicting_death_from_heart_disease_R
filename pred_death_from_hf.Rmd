@@ -1,0 +1,611 @@
+---
+title: "HarvardX Capstone Report - Predicting Death from Heart Failure"
+author: "Neli Tsereteli"
+date: Junuary 2021
+output:
+  pdf_document:
+    toc: yes
+    latex_engine: xelatex
+  html_document:
+    toc: yes
+urlcolor: blue
+---
+
+\newpage
+# Deliverables
+There are three deliverables for the project:  
+
+1. Report in .Rmd format
+2. Report in .pdf format knit from the .Rmd file
+3. R script in .R format that generates predicted outcomes and their evaluations
+
+
+# Introduction
+## Project overview 
+
+This project, [HarvardX: PH125.9x, Data Science: Capstone](https://www.edx.org/course/data-science-capstone), is a part of the [Professional Certificate in Data Science](https://www.edx.org/professional-certificate/harvardx-data-science) course led by HarvardX. This program was supported in part by NIH grant R25GM114818.  
+
+Cardiovascular diseases, mainly exhibited as myocardial infarctions and heart failures, kill approximately 17 million people globally every year. As a result, such diseases represent an important area of public health.  
+
+In this project, I will use machine learning (ML) to predict patient's survival following a heart failure, using patients' available electronic medical records. In order to try to reproduce the results reported in a paper called [Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone]("https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-020-1023-5"), I will also rank the features corresponding to the most important risk factors, as determined by the ML algorithms. 
+
+I will build  and tune 8 different models:
+
+1. k-Nearest Neighbors (KNN)
+2. Random Forest (RF)
+3. Adaptive Boosting (AdaBoost)
+4. Linear Discriminant Analysis (LDA)
+5. Support Vector Machine (SVM) - Linear 
+6. Support Vector Machine (SVM) - Radial
+7. Generalized linear model via penalized maximum likelihood (GLMNET)
+8. Multivariate adaptive regression spline (MARS)
+
+
+## Dataset
+
+The dataset here is [Heart failure clinical records Data Set]("https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records") taken from the [UC Irvine Machine Learning Repository](https://archive.ics.uci.edu/ml/index.php"). The dataset can also be found on [Kaggle]("https://www.kaggle.com/") at [the following link]("https://www.kaggle.com/andrewmvd/heart-failure-clinical-data/notebooks"). 
+
+It contains the medical records of 299 patients who had heart failure, collected during their follow-up period, where each patient profile has 13 clinical features (clinical, body, and lifestyle information). The medical records were collected at the Faisalabad Institute of Cardiology and at the Allied Hospital in Faisalabad (Punjab, Pakistan), during April–December 2015. All 299 patients had left ventricular systolic dysfunction and had previous heart failures that put them in classes III or IV of New York Heart Association (NYHA) classification of the stages of heart failure. 
+
+## Evaluation metrics
+Since the outcome is death, sensitivity was used to tune the models. Receiver operating characteristic (ROC) area under the curve was also used to assess and compare the models' performance.   
+
+\newpage
+# Methods
+## Setting up the environment
+
+```{r message=FALSE, warning=FALSE}
+# Install missing packages automatically
+if(!require(tidyverse)) install.packages("tidyverse",repos ="http://cran.us.r-project.org")
+if(!require(caret))install.packages("caret",repos ="http://cran.us.r-project.org")
+if(!require(caretEnsemble))install.packages("caretEnsemble",repos ="http://cran.us.r-project.org")
+if(!require(data.table))install.packages("data.table",repos ="http://cran.us.r-project.org")
+if(!require(stringr))install.packages("stringr",repos ="http://cran.us.r-project.org")
+if(!require(lubridate))install.packages("lubridate",repos ="http://cran.us.r-project.org")
+if(!require(knitr))install.packages("knitr",repos ="http://cran.us.r-project.org")
+if(!require(rio))install.packages("rio",repos ="http://cran.us.r-project.org")
+if(!require(dplyr))install.packages("dplyr",repos ="http://cran.us.r-project.org")
+if(!require(skimr))install.packages("skimr",repos ="http://cran.us.r-project.org")
+if(!require(PerformanceAnalytics))install.packages("PerformanceAnalytics",repos ="http://cran.us.r-project.org")
+
+library(tidyverse)    # a set of packages that work in harmony
+library(caret)        # functions for training and plotting classification and regression models
+library(caretEnsemble)# ensembles of caret models: caretList() and caretStack()
+library(data.table)   # extension of 'data.frame'
+library(stringr)      # simple, consistent wrappers for common string operations
+library(lubridate)    # functions to work with date-times and time-spans
+library(knitr)        # general-purpose tool for dynamic report generation in R
+library(rio)          # a Swiss-Army Knife for Data I/O
+library(dplyr)        # a grammar of data manipulation
+library(skimr)        # compact and flexible summaries of data
+library(PerformanceAnalytics) # econometric functions for performance
+```
+
+### Set plotting options
+```{r}
+# Set plot options
+knitr::opts_chunk$set(fig.width = 6, fig.height = 4) 
+```
+
+## Loading the data
+```{r message=FALSE, warning=FALSE}
+heart_data <- rio::import("https://archive.ics.uci.edu/ml/machine-learning-databases/00519/heart_failure_clinical_records_dataset.csv")
+```
+
+\newpage
+## Data exploration    
+### Let's look at data summary
+```{r message=FALSE, warning=FALSE}
+str(heart_data)
+```
+
+### More descriptions
+As shown below, there are no missing values to impute. 
+```{r message=FALSE, warning=FALSE}
+skimmed <- skim(heart_data)
+skimmed[, c(2, 3, 7, 9, 11:12)]
+rm(skimmed)
+```
+
+\newpage
+### Make a correlation plot
+```{r message=FALSE, warning=FALSE}
+chart.Correlation(heart_data[1:12], histogram=TRUE, pch=19)
+```
+
+## Data pre-processing
+I will be building several models including random forest and k-nearest neighbors. Since nearest neighbor learners use distance functions to identify the most similar or nearest examples, many common distance functions such as [Euclidean distance]("https://www.datanovia.com/en/lessons/clustering-distance-measures/") assume that the data are in numeric format because defining distance between categories is difficult. For these reasons, categories, such as sex and smoking, are represented as 1s and 0s, or dummy variables. In addition, each feature of the input data should be measured with the similar range of values. That is, the variables need to be normalized or scaled.  
+
+### Factorize the outcome
+```{r}
+heart_data$DEATH_EVENT <- as.factor(ifelse(heart_data$DEATH_EVENT == 1, "Died", "Survived"))
+```
+
+### Scale numerical variables using scale()
+```{r}
+heart_data[, c("age", "creatinine_phosphokinase", "ejection_fraction",
+               "platelets", "serum_creatinine", "serum_sodium", "time")] <- 
+  scale(heart_data[, c("age", "creatinine_phosphokinase", "ejection_fraction",
+               "platelets", "serum_creatinine", "serum_sodium", "time")])
+```
+
+## Train-test partitioning
+The advantage of using createDataPartition() over the traditional random sample() is that it preserves the proportion of the categories in Y variable, that can be disturbed if you sample randomly. 
+```{r}
+# Create train-test partitions.
+# Test set will be 25% of the data.
+set.seed(1234)
+test_index <- createDataPartition(y = heart_data$DEATH_EVENT, times = 1, p = 0.25, list = FALSE)
+train <- heart_data[-test_index,]
+test <- heart_data[test_index,]
+rm(test_index)
+
+# Save outcomes
+train_outcome <- train %>% select(DEATH_EVENT)
+test_outcome <- test %>% select(DEATH_EVENT)
+```
+
+## Feature importance
+### Visualize importance of variables with box plots
+Interpretation: if you group the predictor variable (X) by the categories of the outcome (Y), a significant mean shift amongst the X groups is a strong indicator that X will play a significant role in predicting Y. 
+```{r}
+# caret's featurePlot
+featurePlot(x = train[, 1:12], 
+            y = train$DEATH_EVENT, 
+            plot = "box", 
+            strip = strip.custom(par.strip.text = list(cex = 0.7)),
+            scales = list(x = list(relation = "free"), y = list(relation = "free")))
+```
+
+### Visualize importance of variables with density plots
+For a variable to be important, one would expect the density curves to be significantly different for the 2 classes, both in terms of the height and placement.
+```{r}
+featurePlot(x = train[, 1:12], 
+            y = train$DEATH_EVENT, 
+            plot = "density",
+            strip=strip.custom(par.strip.text=list(cex=.7)),
+            scales = list(x = list(relation="free"), y = list(relation="free")))
+```
+
+Looks like diabetes, sex and smoking are not contributing much. But let's look more into variable importance by using recursive feature selection.
+
+## Feature selection using recursive feature elimination (RFE)
+It looks like not all the variables are as important as others. Let's use caret's feature selection to narrow them down.
+(Note: I am excluding follow up time on purpose). 
+
+```{r}
+# Seed for reproducibility
+set.seed(1234)
+
+# Model sizes to consider
+subsets <- c(1:11)
+
+# Control: 
+# k-fold cross validation repeated 3 times
+# Random forest based rfFuncs
+control <- rfeControl(functions = rfFuncs,
+                   method = "repeatedcv",
+                   repeats = 3,
+                   verbose = FALSE)
+
+# Recursive feature elimination
+# Exclude outcome and time
+rfe_result <- rfe(x = train[, 1:11], y = train$DEATH_EVENT,
+                 sizes = subsets,
+                 rfeControl = control)
+
+rfe_result
+```
+
+This result suggests that out of 11 different features, a model with just 2 features outperformed larger models. However, I will only remove a subset of these as rfe was selected using a random forest based function and is not a definitive guide in and of itself. 
+
+### Subset the columns
+```{r}
+train <- train %>% select(-c(sex, smoking, creatinine_phosphokinase, diabetes, time))
+test <- test %>% select(-c(sex, smoking, creatinine_phosphokinase, diabetes, time))
+```
+
+# Model building - train control
+### What models are supported? 
+```{r message=FALSE, warning=FALSE}
+# See available algorithms in caret
+head(names(getModelInfo()))
+```
+
+### Train control
+```{r}
+# Set 15-fold CV
+# twoClassSummary because the outcome is binary
+# Generate probabilities instead of classes
+control <- trainControl(method = "cv", 
+                        number = 15, 
+                        summaryFunction = twoClassSummary,
+                        classProbs = TRUE)
+```
+
+# Model building - KNN
+### What properties and/or hyperparameters does knn have?
+```{r}
+modelLookup("knn")
+```
+
+### Hyperparameter tuning - choosing K
+There is no universal rule for setting K. However, some use the rule of thumb of starting with the square root of the number of observations in the training data. A smaller K (smaller neighborhoods) may find subtler patterns. 
+Using an odd number will help with ties. 
+
+### caret chooses the optimal k itself
+It automatically tests different possible values of k, then chooses the optimal k that minimizes the cross-validation (“cv”) error, and fits the final best KNN model. 
+
+## Training and tuning
+```{r}
+# Number of possible Ks to evaluate
+possible_ks <- 25
+
+# Train the model
+set.seed(4242)
+model_knn <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "knn", 
+                   trControl = control, 
+                   tuneLength = possible_ks,
+                   metric = "Sens")
+
+# Output of kNN model
+#model_knn
+
+# Plot accuracy
+plot(model_knn, main = "Model sensitivities with KNN")
+
+# Print best parameter
+(best_k <- model_knn$bestTune)
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_knn, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Feature importance
+```{r}
+plot(varImp(model_knn), main = "Variable Importance with KNN")
+```
+
+\newpage
+# Model building - RF
+### What properties and/or hyperparameters does rf have?
+```{r}
+modelLookup("rf")
+```
+
+## Training and tuning
+```{r message=TRUE, warning=FALSE}
+# Number of possible mtrys to evaluate
+possible_mtry <- 25
+
+# Train the model
+set.seed(4242)
+model_rf <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "rf", 
+                   trControl = control,
+                   tuneLength = possible_mtry,
+                   metric = "Sens")
+
+# Output of rf model
+model_rf
+
+# Plot accuracy
+plot(model_rf, main = "Model sensitivities with RF")
+
+# Print best parameter
+(best_mtry <- model_rf$bestTune)
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_rf, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Variable importance
+```{r}
+var_imp <- varImp(model_rf)
+plot(var_imp, main = "Variable Importance with RF")
+```
+
+\newpage
+# Model building - AdaBoost
+### What properties and/or hyperparameters does adaboost have?
+```{r}
+modelLookup("adaboost")
+```
+
+## Training and tuning
+```{r}
+# Number of possible unique hyperparameters to evaluate
+possible_params <- 3
+
+# Train the model
+set.seed(4242)
+model_adaboost <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "adaboost", 
+                   trControl = control,
+                   tuneLength = possible_params,
+                   metric = "Sens")
+
+# Output of adaboost model
+model_adaboost
+
+# Plot accuracy
+plot(model_adaboost)
+
+# Print best parameter
+(best <- model_adaboost$bestTune)
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_adaboost, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Feature importance
+```{r}
+var_imp <- varImp(model_adaboost)
+plot(var_imp, main = "Variable Importance with adaboost")
+```
+
+\newpage
+# Model building - LDA
+## Training
+```{r}
+# Train the model
+set.seed(4242)
+model_lda <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "lda", 
+                   trControl = control,
+                   metric = "Sens"
+                   )
+
+# Output of lda model
+model_lda
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_lda, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Feature importance
+```{r}
+var_imp <- varImp(model_lda)
+plot(var_imp, main = "Variable Importance with adaboost")
+```
+
+\newpage
+# Model building - SVM Linear
+### What properties and/or hyperparameters does SVM linear have?
+```{r}
+modelLookup("svmLinear")
+```
+
+```{r}
+# Number of possible unique hyperparameters to evaluate
+possible_params <- 3
+
+# Train the model
+set.seed(4242)
+model_svm <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "svmLinear", 
+                   trControl = control,
+                   tuneLength = possible_params,
+                   metric = "Sens")
+
+# Output of svm model
+model_svm
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_svm, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Feature importance
+```{r}
+var_imp <- varImp(model_svm)
+plot(var_imp, main = "Variable Importance with adaboost")
+```
+
+\newpage
+# Model building - SVM Radial
+### What properties and/or hyperparameters does SVM radial have?
+```{r}
+modelLookup("svmRadial")
+```
+
+## Training and tuning
+```{r}
+# Number of possible unique hyperparameters to evaluate
+possible_params <- 3
+
+# Train the model
+set.seed(4242)
+model_svm_radial <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "svmRadial", 
+                   trControl = control,
+                   tuneLength = possible_params,
+                   metric = "Sens")
+
+# Output of svm model
+model_svm_radial
+
+# Plot
+plot(model_svm_radial)
+
+# Print best parameter
+(best <- model_svm_radial$bestTune)
+
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_svm_radial, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Feature importance
+```{r}
+var_imp <- varImp(model_svm_radial)
+plot(var_imp, main = "Variable Importance with SVM Radial")
+```
+
+\newpage
+# Model building - glmnet
+### What properties and/or hyperparameters does GLMNET have?
+```{r}
+modelLookup("glmnet")
+```
+
+```{r}
+# Number of possible unique hyperparameters to evaluate
+possible_params <- 20
+
+# Train the model
+set.seed(4242)
+model_glmnet <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "glmnet", 
+                   trControl = control,
+                   tuneLength = possible_params,
+                   metric = "Sens")
+
+# Output of glmnet model
+# model_glmnet
+
+# Plot
+plot(model_glmnet)
+
+# Print best parameter
+(best <- model_glmnet$bestTune)
+
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_glmnet, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Feature importance
+```{r}
+var_imp <- varImp(model_glmnet)
+plot(var_imp, main = "Variable Importance with glmnet")
+```
+
+\newpage
+# Model building - MARS
+### What properties and/or hyperparameters does MARS have?
+```{r}
+modelLookup("earth")
+```
+
+```{r message=FALSE, warning=FALSE}
+# Number of possible unique hyperparameters to evaluate
+possible_params <- 5
+
+# Train the model
+set.seed(4242)
+model_mars <- train(DEATH_EVENT ~ ., 
+                   data = train, 
+                   method = "earth", 
+                   trControl = control,
+                   tuneLength = possible_params,
+                   metric = "Sens")
+
+# Output of mars model
+model_mars
+
+# Plot
+plot(model_mars)
+
+# Print best parameter
+(best <- model_glmnet$bestTune)
+```
+
+## Predictions and confusion matrix
+```{r}
+# Predict
+predicted <- predict(model_mars, newdata = test)
+
+# Confusion matrix
+confusionMatrix(predicted, test_outcome$DEATH_EVENT, mode = "everything")
+```
+
+## Feature importance
+```{r}
+var_imp <- varImp(model_mars)
+plot(var_imp, main = "Variable Importance with MARS")
+```
+
+
+# Comparing the models
+```{r}
+# Compare model performances using resample()
+models_compare <- resamples(list(ADABOOST = model_adaboost, GLMNET = model_glmnet, 
+                                 KNN = model_knn, LDA = model_lda, RF = model_rf,
+                                 SVM_L = model_svm, SVM_R = model_svm_radial, 
+                                 MARS = model_mars))
+
+# Summary of the models performances
+(summary_table <- summary(models_compare))
+
+# Plot
+scales <- list(x = list(relation = "free"), y = list(relation = "free"))
+bwplot(models_compare, scales = scales)
+```
+
+# Conclusion
+## Final model
+While it does not have the highest ROC, random forest has the highest sensitivity with a mean ROC of `r summary_table$statistics$ROC["RF", "Mean"]`.
+
+## Relevance
+The report partially reproduces the results of the research paper: while most of the models showed that serum creatinine and ejection fraction are useful predictors of survival of heart failure patients, some of the models also showed sodium. Notably, the fact that several different algorithms showed similar results with regards to feature importance indicates to the generalisability of the approach. Random forest had the highest sensitivity with a mean ROC of `r summary_table$statistics$ROC["RF", "Mean"]` and serum creatitine and ejection fraction as the two most important predictors. This means that the two measures could helpful tools for medical practitioners working with heart failure patients and for targeting the most vulnerable patients in order to increase their chance of survival. 
+
+## Limitations and future work
+One limitation is the fact that while the ROC reaches `r summary_table$statistics$ROC["RF", "Mean"]`, sensitivity, which is especially important for correctly predicting deaths, remains not much better that just guessing (at about 0.5). Limitations also include the fact that the dataset was quite small, especially after further division into train and testing splits. As a result, it is possible that there was not enough power to capture the importance of other variables. It would be intersting to investigate the observed relationships in a larger dataset. Since some unobserved variables might be important too, for future, it would also be interesting to add other information such as BMI, taking certain medications and presence of comorbidities like kidnsey diease. Like with any other life sciences research, it is also crucial to validate the results on a different cohort. 
+
+
+# Important references
+
+1. [Caret Package – A Practical Guide to Machine Learning in R]("https://www.machinelearningplus.com/machine-learning/caret-package/") by Selva Prabhakaran
+2. [Machine learning can predict survival of patients with heart failure from serum creatinine and ejection fraction alone]("https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-020-1023-5") by Davide Chicco and Giuseppe Jurman
+3. [caret]("https://cran.r-project.org/web/packages/caret/index.html") package documentation 
+
